@@ -135,7 +135,7 @@ Icon=f.Icon or nil,
 Type=f.Type,
 Colors=f.Colors or{(d.IconThemeTag or Color3.new(1,1,1)),Color3.new(1,1,1)},
 Transparency=f.Transparency or{0,0},
-Size=f.Size or UDim2.new(0,24,0,24),
+Size=f.Size or UDim2.new(0,50,0,50),
 
 IconFrame=nil,
 }
