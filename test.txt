@@ -6,7 +6,7 @@ local HttpService = game:GetService("HttpService")
 
 local LocalPlayer = Players.LocalPlayer
 
--- Автоматическое копирование ссылки в буфер обмена
+
 pcall(function()
     if setclipboard then
         setclipboard("https://discord.gg/W2u9gXPHbr")
@@ -101,7 +101,7 @@ local function CreateJumpSystem(config)
     local defaultPos = config.Position or UDim2.new(0.5, -(size / 2), 0.5, -(size / 2))
     local buttonPos = LoadButtonPosition(saveName) or defaultPos
 
-    --// BUTTON
+    
     local button = Instance.new("TextButton")
     button.Name = saveName .. "Button"
     button.Parent = gui
@@ -120,12 +120,12 @@ local function CreateJumpSystem(config)
     button.Visible = visible
     button.ZIndex = 100
 
-    --// CORNER (круглая)
+    
     local corner = Instance.new("UICorner")
     corner.CornerRadius = UDim.new(0.5, 0)
     corner.Parent = button
 
-    --// ЛЁГКИЙ ЦВЕТНОЙ ОТТЕНОК ВНУТРИ
+    
     local innerGlow = Instance.new("Frame")
     innerGlow.Name = "InnerGlow"
     innerGlow.Parent = button
@@ -153,7 +153,7 @@ local function CreateJumpSystem(config)
     })
     gradientTween:Play()
 
-    --// STROKE + SHIMMER
+    
     local stroke = Instance.new("UIStroke")
     stroke.Thickness = 2.5
     stroke.Color = Color3.fromRGB(255, 255, 255)
@@ -168,14 +168,14 @@ local function CreateJumpSystem(config)
     )
     shimmerTween:Play()
 
-    -- Обновление размера
+    
     local function UpdateSize(newSize)
         size = newSize
         button.Size = UDim2.new(0, size, 0, size)
         button.TextSize = math.floor(size * 0.42)
     end
 
-    --// CLICK ANIMATION
+    
     local function PlayClickAnimation()
         local currentSize = button.Size.X.Offset
         local tweenDown = TweenService:Create(button, TweenInfo.new(0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
@@ -229,7 +229,7 @@ local function CreateJumpSystem(config)
         end)
     end
 
-    --// RESPAWN (сброс кулдауна)
+    
     LocalPlayer.CharacterAdded:Connect(function()
         cooldown = false
         task.wait()
@@ -238,7 +238,7 @@ local function CreateJumpSystem(config)
         end
     end)
 
-    --// DRAGGING
+    
     local dragging = false
     local dragStart
     local startPos
@@ -283,7 +283,7 @@ local function CreateJumpSystem(config)
         end
     end)
 
-    --// GET BOMB
+    
     local function GetBomb()
         local character = LocalPlayer.Character
         local backpack = LocalPlayer:FindFirstChild("Backpack")
@@ -394,7 +394,7 @@ local function CreateJumpSystem(config)
         end)
     end
 
-    --// CLICK
+
     button.MouseButton1Click:Connect(function()
         if editMode then
             return
@@ -445,7 +445,7 @@ local function CreateJumpSystem(config)
     })
 end
 
---// PRANK BOMB
+
 CreateJumpSystem({
     Tab = PrankTab,
     BombName = "FakeBomb",
@@ -461,7 +461,7 @@ CreateJumpSystem({
     })
 })
 
---// GOLD BOMB
+
 CreateJumpSystem({
     Tab = GoldTab,
     BombName = "GoldBomb",
