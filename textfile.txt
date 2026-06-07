@@ -1,0 +1,697 @@
+V16 PC N MOBILE
+
+-- OSN MM2 / MMV - FULL SCRIPT + BINDS TAB (PC Executors Ready - Nothing Removed)
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local Workspace = game:GetService("Workspace")
+
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+local aimbotEnabled = true
+local speedEnabled = false
+local normalSpeed = 16
+local maxSpeed = 30
+local currentSpeed = 30
+
+local murdererESP = nil
+local sheriffESP = nil
+local gunESP = nil
+local innocentESP = {}
+local selfHighlight = nil
+local selfLabel = nil
+
+local murdererESPEnabled = true
+local sheriffESPEnabled = true
+local gunESPEnabled = false
+local innocentESPEnabled = true
+
+local loopThrow = false
+local lastBombTime = 0
+local BOMB_COOLDOWN = 23
+
+local spectateEnabled = false
+local currentSpectateIndex = 1
+local spectateConnection = nil
+
+local editingMode = false
+
+local isMM2 = (game.PlaceId == 142823291)
+local showGoldJump = not isMM2
+
+local alivePlayers = {}
+
+-- ==================== CORE FUNCTIONS (UNCHANGED) ====================
+local function isMurderer(player)
+    if not player or not player.Character then return false end
+    local char = player.Character
+    local tool = char:FindFirstChildWhichIsA("Tool")
+    if tool and string.match(tool.Name:lower(), "knife") then return true end
+    if player:FindFirstChild("Backpack") then
+        for _, t in ipairs(player.Backpack:GetChildren()) do
+            if string.match(t.Name:lower(), "knife") then return true end
+        end
+    end
+    return false
+end
+
+local function getMurderer()
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and isMurderer(player) then return player end
+    end
+    return nil
+end
+
+local function isSheriff(player)
+    if not player or not player.Character then return false end
+    local char = player.Character
+    local tool = char:FindFirstChildWhichIsA("Tool")
+    if tool and string.match(tool.Name:lower(), "gun") then return true end
+    if player:FindFirstChild("Backpack") then
+        for _, t in ipairs(player.Backpack:GetChildren()) do
+            if string.match(t.Name:lower(), "gun") then return true end
+        end
+    end
+    return false
+end
+
+local function getSheriff()
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and isSheriff(player) then return player end
+    end
+    return nil 
+end
+
+local function shootMurderer()
+    local murderer = getMurderer()
+    if not murderer or not murderer.Character then return end
+    local char = LocalPlayer.Character
+    if not char then return end
+    local humanoid = char:FindFirstChild("Humanoid")
+    if not humanoid then return end
+    
+    local gun = nil
+    for _, tool in ipairs(LocalPlayer.Backpack:GetChildren()) do
+        if tool:IsA("Tool") and string.match(tool.Name:lower(), "gun") then
+            gun = tool
+            humanoid:EquipTool(gun)
+            break
+        end
+    end
+    
+    if not gun then
+        gun = char:FindFirstChildWhichIsA("Tool")
+        if not gun or not string.match(gun.Name:lower(), "gun") then
+            print("No gun found")
+            return
+        end
+    end
+    
+    local root = murderer.Character:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+    local torsoPos = root.Position + Vector3.new(0, 0.4, 0)
+    local args = { CFrame.new(char.RightHand.Position), CFrame.new(torsoPos) }
+    
+    local shootRemote = gun:FindFirstChild("Shoot")
+    if shootRemote then
+        shootRemote:FireServer(unpack(args))
+        task.spawn(function()
+            for i = 1, 4 do
+                shootRemote:FireServer(unpack(args))
+                task.wait(0.0008)
+            end
+        end)
+    end
+    print("🔥 OSN ULTRA FAST SHOOT - Hard middle hitbox tracking")
+end
+
+local function findNearestPlayer()
+    local nearestPlayer = nil
+    local shortestDistance = math.huge
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local localRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if localRoot then
+                local distance = (localRoot.Position - player.Character.HumanoidRootPart.Position).Magnitude
+                if distance < shortestDistance then
+                    shortestDistance = distance
+                    nearestPlayer = player
+                end
+            end
+        end
+    end
+    return nearestPlayer
+end
+
+local function knifeThrow(silent)
+    if not isMurderer(LocalPlayer) then 
+        if silent then return end
+        print("You're not murderer.")
+        return 
+    end
+    if not LocalPlayer.Character:FindFirstChild("Knife") then
+        local hum = LocalPlayer.Character:FindFirstChild("Humanoid")
+        if LocalPlayer.Backpack:FindFirstChild("Knife") then
+            hum:EquipTool(LocalPlayer.Backpack:FindFirstChild("Knife"))
+        else
+            if silent then return end
+            print("You don't have the knife..?")
+            return
+        end
+    end
+    local NearestPlayer = findNearestPlayer()
+    if not NearestPlayer or not NearestPlayer.Character then return end
+    local nearestHRP = NearestPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not nearestHRP then return end
+    local argsThrowRemote = {
+        CFrame.new(LocalPlayer.Character.RightHand.Position),
+        CFrame.new(nearestHRP.Position + nearestHRP.CFrame.LookVector * 2)
+    }
+    LocalPlayer.Character:WaitForChild("Knife"):WaitForChild("Events"):WaitForChild("KnifeThrown"):FireServer(unpack(argsThrowRemote))
+end
+
+local function bombJump()
+    if tick() - lastBombTime < BOMB_COOLDOWN then return end
+    lastBombTime = tick()
+
+    local char = LocalPlayer.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+    local root = char.HumanoidRootPart
+    local humanoid = char:FindFirstChild("Humanoid")
+    if not humanoid then return end
+
+    local bombTool = nil
+    if LocalPlayer.Backpack:FindFirstChild("FakeBomb") or LocalPlayer.Backpack:FindFirstChild("PrankBomb") then
+        bombTool = LocalPlayer.Backpack:FindFirstChild("FakeBomb") or LocalPlayer.Backpack:FindFirstChild("PrankBomb")
+    elseif char:FindFirstChild("FakeBomb") or char:FindFirstChild("PrankBomb") then
+        bombTool = char:FindFirstChild("FakeBomb") or char:FindFirstChild("PrankBomb")
+    else
+        for _, obj in ipairs(Workspace:GetDescendants()) do
+            if obj.Name == "FakeBomb" or obj.Name == "PrankBomb" then bombTool = obj break end
+        end
+    end
+
+    if not bombTool then return end
+
+    if bombTool.Parent ~= LocalPlayer.Backpack then
+        bombTool.Parent = LocalPlayer.Backpack
+        task.wait(0.01)
+    end
+    if bombTool.Parent ~= char then
+        humanoid:EquipTool(bombTool)
+        task.wait(0.05)
+    end
+
+    bombTool = char:FindFirstChild("FakeBomb") or char:FindFirstChild("PrankBomb")
+    if not bombTool then return end
+
+    local throwCFrame = CFrame.new(root.Position + Vector3.new(0, -3.2, 0))
+    local remote = bombTool:FindFirstChildWhichIsA("RemoteEvent")
+    if remote then remote:FireServer(throwCFrame, 50) end
+
+    task.wait(0.15)
+    local targetPos = root.Position + Vector3.new(0, 4.0, 0)
+    local startPos = root.Position
+    local steps = 10
+    for i = 1, steps do
+        local progress = i / steps
+        local currentPos = startPos:Lerp(targetPos, progress)
+        root.CFrame = CFrame.new(currentPos) * CFrame.Angles(0, root.CFrame.Yaw, 0)
+        root.Velocity = Vector3.new(0, -12, 0)
+        task.wait(0.018)
+    end
+    root.CFrame = CFrame.new(targetPos) * CFrame.Angles(0, root.CFrame.Yaw, 0)
+    root.Velocity = Vector3.new(0, 0, 0)
+    task.wait(0.02)
+    root.Velocity = Vector3.new(0, 72, 0)
+end
+
+local function createESP(char, color)
+    if not char then return nil end
+    for _, child in ipairs(char:GetChildren()) do
+        if child:IsA("Highlight") then child:Destroy() end
+    end
+    local highlight = Instance.new("Highlight")
+    highlight.Adornee = char
+    highlight.FillColor = color
+    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+    highlight.FillTransparency = 0.4
+    highlight.OutlineTransparency = 0
+    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    highlight.Parent = char
+    return highlight
+end
+
+local function updateAlivePlayers()
+    alivePlayers = {}
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer and plr.Character and plr.Character:FindFirstChild("Humanoid") and plr.Character.Humanoid.Health > 0 then
+            table.insert(alivePlayers, plr)
+        end
+    end
+end
+
+local function createSelfHighlight()
+    if selfHighlight then selfHighlight:Destroy() end
+    if selfLabel then selfLabel:Destroy() end
+    local char = LocalPlayer.Character
+    if not char then return end
+    selfHighlight = Instance.new("Highlight")
+    selfHighlight.Adornee = char
+    selfHighlight.FillColor = Color3.fromRGB(0, 255, 255)
+    selfHighlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+    selfHighlight.FillTransparency = 0.3
+    selfHighlight.OutlineTransparency = 0
+    selfHighlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    selfHighlight.Parent = char
+    
+    selfLabel = Instance.new("BillboardGui")
+    selfLabel.Adornee = char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart")
+    selfLabel.Size = UDim2.new(0, 200, 0, 50)
+    selfLabel.StudsOffset = Vector3.new(0, 3, 0)
+    selfLabel.AlwaysOnTop = true
+    selfLabel.Parent = char
+    local labelText = Instance.new("TextLabel")
+    labelText.Size = UDim2.new(1, 0, 1, 0)
+    labelText.BackgroundTransparency = 1
+    labelText.Text = "YOU"
+    labelText.TextColor3 = Color3.fromRGB(0, 255, 255)
+    labelText.TextScaled = true
+    labelText.Font = Enum.Font.GothamBold
+    labelText.TextStrokeTransparency = 0
+    labelText.TextStrokeColor3 = Color3.new(0,0,0)
+    labelText.Parent = selfLabel
+end
+
+local function removeSelfHighlight()
+    if selfHighlight then selfHighlight:Destroy() selfHighlight = nil end
+    if selfLabel then selfLabel:Destroy() selfLabel = nil end
+end
+
+local function startSpectate()
+    if spectateConnection then spectateConnection:Disconnect() end
+    createSelfHighlight()
+    spectateConnection = RunService.RenderStepped:Connect(function()
+        if not spectateEnabled then return end
+        updateAlivePlayers()
+        if #alivePlayers == 0 then 
+            Camera.CameraSubject = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
+            return 
+        end
+        if currentSpectateIndex > #alivePlayers then currentSpectateIndex = 1 end
+        local target = alivePlayers[currentSpectateIndex]
+        if target and target.Character and target.Character:FindFirstChild("Humanoid") then
+            Camera.CameraSubject = target.Character.Humanoid
+        end
+    end)
+end
+
+local function stopSpectate()
+    if spectateConnection then spectateConnection:Disconnect() spectateConnection = nil end
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+        Camera.CameraSubject = LocalPlayer.Character.Humanoid
+    end
+    removeSelfHighlight()
+end
+
+local function nextSpectate()
+    updateAlivePlayers()
+    if #alivePlayers == 0 then return end
+    currentSpectateIndex = (currentSpectateIndex % #alivePlayers) + 1
+end
+
+local function prevSpectate()
+    updateAlivePlayers()
+    if #alivePlayers == 0 then return end
+    currentSpectateIndex = currentSpectateIndex - 1
+    if currentSpectateIndex < 1 then currentSpectateIndex = #alivePlayers end
+end
+
+-- ==================== SCREEN GUI + FLOATING BUTTONS (UNCHANGED) ====================
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "OSNMM2Gui"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+-- SHOOT BUTTON
+local ShootButton = Instance.new("TextButton")
+ShootButton.Size = UDim2.new(0, 180, 0, 45)
+ShootButton.BackgroundColor3 = Color3.fromRGB(80, 0, 120)
+ShootButton.BackgroundTransparency = 0.92
+ShootButton.Text = "SHOOT"
+ShootButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+ShootButton.TextScaled = true
+ShootButton.Font = Enum.Font.GothamBold
+ShootButton.Visible = false
+ShootButton.Parent = ScreenGui
+if getgenv().OSN_ShootPos then ShootButton.Position = getgenv().OSN_ShootPos end
+
+local ShootCorner = Instance.new("UICorner")
+ShootCorner.CornerRadius = UDim.new(0.3, 0)
+ShootCorner.Parent = ShootButton
+
+local ShootStroke = Instance.new("UIStroke")
+ShootStroke.Color = Color3.fromRGB(180, 0, 255)
+ShootStroke.Thickness = 3
+ShootStroke.Parent = ShootButton
+
+-- BOMB BUTTON (glow + 23s)
+local BombJumpButton = Instance.new("TextButton")
+BombJumpButton.Size = UDim2.new(0, 65, 0, 65)
+BombJumpButton.BackgroundColor3 = Color3.fromRGB(10, 10, 15)
+BombJumpButton.BackgroundTransparency = 0.35
+BombJumpButton.Text = "BOMB\nJUMP"
+BombJumpButton.TextColor3 = Color3.fromRGB(0, 255, 240)
+BombJumpButton.TextScaled = true
+BombJumpButton.Font = Enum.Font.GothamBlack
+BombJumpButton.Visible = false
+BombJumpButton.Parent = ScreenGui
+if getgenv().OSN_BombPos then BombJumpButton.Position = getgenv().OSN_BombPos end
+
+local BombCorner = Instance.new("UICorner")
+BombCorner.CornerRadius = UDim.new(0.5, 0)
+BombCorner.Parent = BombJumpButton
+
+local BombStroke = Instance.new("UIStroke")
+BombStroke.Color = Color3.fromRGB(0, 255, 240)
+BombStroke.Thickness = 4
+BombStroke.Transparency = 0.2
+BombStroke.Parent = BombJumpButton
+
+task.spawn(function()
+    while true do
+        if BombJumpButton.Visible then
+            TweenService:Create(BombStroke, TweenInfo.new(1.2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), {Transparency = 0.6}):Play()
+        end
+        task.wait(2)
+    end
+end)
+
+-- Edit Mode (drag + resize + white highlight - unchanged)
+local function makeEditable(btn, saveKey)
+    local resizeHandle = Instance.new("Frame")
+    resizeHandle.Size = UDim2.new(0, 12, 0, 12)
+    resizeHandle.Position = UDim2.new(1, -12, 1, -12)
+    resizeHandle.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    resizeHandle.BackgroundTransparency = 0.4
+    resizeHandle.BorderSizePixel = 0
+    resizeHandle.Visible = false
+    resizeHandle.Parent = btn
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 0)
+    corner.Parent = resizeHandle
+
+    local dragging = false
+    local resizing = false
+    local dragStart, startPos
+    local resizeStart, startSize
+
+    btn.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            if editingMode then
+                btn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+                btn.TextColor3 = Color3.fromRGB(0, 0, 0)
+                resizeHandle.Visible = true
+                dragging = true
+                dragStart = input.Position
+                startPos = btn.Position
+            else
+                if btn == ShootButton then shootMurderer()
+                elseif btn == BombJumpButton then bombJump() end
+            end
+        end
+    end)
+
+    btn.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+            resizing = false
+            resizeHandle.Visible = false
+            if editingMode and saveKey then
+                getgenv()[saveKey] = btn.Position
+                getgenv()[saveKey .. "Size"] = btn.Size
+            end
+            if btn == ShootButton then
+                btn.BackgroundColor3 = Color3.fromRGB(80, 0, 120)
+                btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+            elseif btn == BombJumpButton then
+                btn.BackgroundColor3 = Color3.fromRGB(10, 10, 15)
+                btn.TextColor3 = Color3.fromRGB(0, 255, 240)
+            end
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - dragStart
+            btn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+
+    resizeHandle.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 and editingMode then
+            resizing = true
+            resizeStart = input.Position
+            startSize = btn.Size
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if resizing and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - resizeStart
+            local newWidth = math.max(50, startSize.X.Offset + delta.X)
+            local newHeight = math.max(50, startSize.Y.Offset + delta.Y)
+            btn.Size = UDim2.new(0, newWidth, 0, newHeight)
+        end
+    end)
+end
+
+makeEditable(ShootButton, "OSN_ShootPos")
+makeEditable(BombJumpButton, "OSN_BombPos")
+
+task.spawn(function()
+    while true do
+        if tick() - lastBombTime < BOMB_COOLDOWN then
+            local remaining = math.ceil(BOMB_COOLDOWN - (tick() - lastBombTime))
+            BombJumpButton.Text = "BOMB\nJUMP\n(" .. remaining .. "s)"
+            BombJumpButton.TextColor3 = Color3.fromRGB(255, 80, 80)
+        else
+            BombJumpButton.Text = "BOMB\nJUMP"
+            BombJumpButton.TextColor3 = Color3.fromRGB(0, 255, 240)
+        end
+        task.wait(0.2)
+    end
+end)
+
+-- ==================== RAYFIELD UI + BINDS TAB (ONLY ADDED BINDS) ====================
+local Window = Rayfield:CreateWindow({
+    Name = "OSN MM2 Cheats v3",
+    LoadingTitle = "OSN MM2 & MMV",
+    LoadingSubtitle = "Full Bypass - Binds Added",
+    ConfigurationSaving = { Enabled = true, FolderName = "OSN_MM2", FileName = "Config" }
+})
+
+local AimbotTab = Window:CreateTab("Aimbot", 4483362458)
+local ESPTab = Window:CreateTab("ESP", 4483362458)
+local MiscTab = Window:CreateTab("Misc", 4483362458)
+local ActionTab = Window:CreateTab("Actions", 4483362458)
+local BindsTab = Window:CreateTab("Binds", 4483362458)  -- NEW TAB ONLY
+
+-- Original tabs unchanged
+AimbotTab:CreateToggle({Name = "Aimbot", CurrentValue = aimbotEnabled, Callback = function(v) aimbotEnabled = v end})
+AimbotTab:CreateSlider({Name = "WalkSpeed (max 30)", Range = {1,30}, Increment = 1, CurrentValue = currentSpeed, Callback = function(v) currentSpeed = v end})
+AimbotTab:CreateToggle({Name = "Speed Hack", CurrentValue = speedEnabled, Callback = function(v) speedEnabled = v end})
+
+ESPTab:CreateToggle({Name = "Murderer ESP", CurrentValue = murdererESPEnabled, Callback = function(v) murdererESPEnabled = v end})
+ESPTab:CreateToggle({Name = "Sheriff ESP", CurrentValue = sheriffESPEnabled, Callback = function(v) sheriffESPEnabled = v end})
+ESPTab:CreateToggle({Name = "Gun ESP", CurrentValue = gunESPEnabled, Callback = function(v) gunESPEnabled = v end})
+ESPTab:CreateToggle({Name = "Innocent ESP", CurrentValue = innocentESPEnabled, Callback = function(v) innocentESPEnabled = v end})
+
+MiscTab:CreateButton({Name = "Shoot Murderer", Callback = function() shootMurderer() end})
+MiscTab:CreateToggle({Name = "Auto Knife Throw", CurrentValue = loopThrow, Callback = function(v) loopThrow = v end})
+MiscTab:CreateToggle({Name = "Spectate Mode", CurrentValue = spectateEnabled, Callback = function(v) spectateEnabled = v; if v then startSpectate() else stopSpectate() end end})
+MiscTab:CreateButton({Name = "Next Player", Callback = nextSpectate})
+MiscTab:CreateButton({Name = "Prev Player", Callback = prevSpectate})
+
+ActionTab:CreateButton({Name = "Bomb Jump", Callback = function() bombJump() end})
+ActionTab:CreateToggle({Name = "Show SHOOT Button", CurrentValue = false, Callback = function(v) ShootButton.Visible = v end})
+ActionTab:CreateToggle({Name = "Show Bomb Button", CurrentValue = false, Callback = function(v) BombJumpButton.Visible = v end})
+ActionTab:CreateToggle({Name = "Edit Mode (Drag + Resize)", CurrentValue = editingMode, Callback = function(v) 
+    editingMode = v 
+    if v then
+        Rayfield:Notify({Title = "Edit Mode ON", Content = "Click buttons to highlight, drag or resize", Duration = 4})
+    else
+        Rayfield:Notify({Title = "Edit Mode OFF", Content = "Buttons now functional again", Duration = 3})
+    end
+end})
+
+-- BINDS TAB (only added, no other changes)
+BindsTab:CreateKeybind({
+    Name = "Toggle Aimbot",
+    CurrentKeybind = "F1",
+    HoldToInteract = false,
+    Callback = function() aimbotEnabled = not aimbotEnabled end
+})
+
+BindsTab:CreateKeybind({
+    Name = "Toggle Speed Hack",
+    CurrentKeybind = "F2",
+    HoldToInteract = false,
+    Callback = function() speedEnabled = not speedEnabled end
+})
+
+BindsTab:CreateKeybind({
+    Name = "Toggle Murderer ESP",
+    CurrentKeybind = "F3",
+    HoldToInteract = false,
+    Callback = function() murdererESPEnabled = not murdererESPEnabled end
+})
+
+BindsTab:CreateKeybind({
+    Name = "Toggle Sheriff ESP",
+    CurrentKeybind = "F4",
+    HoldToInteract = false,
+    Callback = function() sheriffESPEnabled = not sheriffESPEnabled end
+})
+
+BindsTab:CreateKeybind({
+    Name = "Toggle Gun ESP",
+    CurrentKeybind = "F5",
+    HoldToInteract = false,
+    Callback = function() gunESPEnabled = not gunESPEnabled end
+})
+
+BindsTab:CreateKeybind({
+    Name = "Toggle Innocent ESP",
+    CurrentKeybind = "F6",
+    HoldToInteract = false,
+    Callback = function() innocentESPEnabled = not innocentESPEnabled end
+})
+
+BindsTab:CreateKeybind({
+    Name = "Toggle Auto Knife",
+    CurrentKeybind = "F7",
+    HoldToInteract = false,
+    Callback = function() loopThrow = not loopThrow end
+})
+
+BindsTab:CreateKeybind({
+    Name = "Toggle Spectate",
+    CurrentKeybind = "F8",
+    HoldToInteract = false,
+    Callback = function() 
+        spectateEnabled = not spectateEnabled
+        if spectateEnabled then startSpectate() else stopSpectate() end
+    end
+})
+
+BindsTab:CreateKeybind({
+    Name = "Shoot Murderer",
+    CurrentKeybind = "F9",
+    HoldToInteract = false,
+    Callback = function() shootMurderer() end
+})
+
+BindsTab:CreateKeybind({
+    Name = "Bomb Jump",
+    CurrentKeybind = "F10",
+    HoldToInteract = false,
+    Callback = function() bombJump() end
+})
+
+Rayfield:Notify({Title = "OSN Loaded", Content = "Binds tab added - Set your keys", Duration = 5})
+
+-- ==================== MAIN LOOPS (UNCHANGED) ====================
+RunService.RenderStepped:Connect(function()
+    if aimbotEnabled and UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then
+        local murderer = getMurderer()
+        if murderer and murderer.Character and murderer.Character:FindFirstChild("HumanoidRootPart") then
+            Camera.CFrame = CFrame.new(Camera.CFrame.Position, murderer.Character.HumanoidRootPart.Position)
+        end
+    end
+
+    if murdererESPEnabled then
+        local murderer = getMurderer()
+        if murderer and murderer.Character then
+            if not murdererESP or murdererESP.Adornee ~= murderer.Character then
+                if murdererESP then murdererESP:Destroy() end
+                murdererESP = createESP(murderer.Character, Color3.fromRGB(255, 0, 0))
+            end
+        else
+            if murdererESP then murdererESP:Destroy() murdererESP = nil end
+        end
+    else
+        if murdererESP then murdererESP:Destroy() murdererESP = nil end
+    end
+
+    if sheriffESPEnabled then
+        local sheriff = getSheriff()
+        if sheriff and sheriff.Character then
+            if not sheriffESP or sheriffESP.Adornee ~= sheriff.Character then
+                if sheriffESP then sheriffESP:Destroy() end
+                sheriffESP = createESP(sheriff.Character, Color3.fromRGB(0, 150, 255))
+            end
+        else
+            if sheriffESP then sheriffESP:Destroy() sheriffESP = nil end
+        end
+    else
+        if sheriffESP then sheriffESP:Destroy() sheriffESP = nil end
+    end
+
+    if gunESPEnabled then
+        local gunDrop = Workspace:FindFirstChild("GunDrop", true)
+        if gunDrop then
+            if not gunESP or gunESP.Adornee ~= gunDrop then
+                if gunESP then gunESP:Destroy() end
+                gunESP = createESP(gunDrop, Color3.fromRGB(255, 215, 0))
+            end
+        else
+            if gunESP then gunESP:Destroy() gunESP = nil end
+        end
+    else
+        if gunESP then gunESP:Destroy() gunESP = nil end
+    end
+
+    if innocentESPEnabled then
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr ~= LocalPlayer and plr.Character and not isMurderer(plr) and not isSheriff(plr) then
+                if not innocentESP[plr] or innocentESP[plr].Adornee ~= plr.Character then
+                    if innocentESP[plr] then innocentESP[plr]:Destroy() end
+                    innocentESP[plr] = createESP(plr.Character, Color3.fromRGB(0, 255, 100))
+                end
+            else
+                if innocentESP[plr] then innocentESP[plr]:Destroy() innocentESP[plr] = nil end
+            end
+        end
+    else
+        for _, hl in pairs(innocentESP) do if hl then hl:Destroy() end end
+        innocentESP = {}
+    end
+
+    if spectateEnabled then
+        if not selfHighlight then createSelfHighlight() end
+    else
+        if selfHighlight then removeSelfHighlight() end
+    end
+end)
+
+RunService.Heartbeat:Connect(function()
+    local char = LocalPlayer.Character
+    if char and char:FindFirstChild("Humanoid") then
+        local hum = char.Humanoid
+        hum.WalkSpeed = speedEnabled and currentSpeed or normalSpeed
+    end
+end)
+
+task.spawn(function()
+    while true do
+        if loopThrow then knifeThrow(true) end
+        task.wait(0.2)
+    end
+end)
+M
